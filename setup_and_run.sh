@@ -126,8 +126,15 @@ echo "✅ Using JavaFX modules from: $JAVAFX_PATH"
 # Build classpath
 CLASSPATH="target/classes:$(mvn dependency:build-classpath -q -Dmdep.outputFile=/dev/stdout)"
 
-# Run the application
-java --module-path "$JAVAFX_PATH" --add-modules javafx.controls,javafx.fxml -cp "$CLASSPATH" com.yunfx.autoshell.Main
+# Run the application with JVM arguments for JFoenix compatibility
+java --module-path "$JAVAFX_PATH" --add-modules javafx.controls,javafx.fxml \
+     --add-opens java.base/java.lang.reflect=ALL-UNNAMED \
+     --add-opens javafx.controls/com.sun.javafx.scene.control.behavior=ALL-UNNAMED \
+     --add-opens javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED \
+     --add-opens javafx.base/com.sun.javafx.binding=ALL-UNNAMED \
+     --add-opens javafx.base/com.sun.javafx.event=ALL-UNNAMED \
+     --add-opens javafx.graphics/com.sun.javafx.stage=ALL-UNNAMED \
+     -cp "$CLASSPATH" com.yunfx.autoshell.Main
 
 echo ""
 echo "👋 YunFx AutoShell has exited. Thank you for using the application!"

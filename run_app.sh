@@ -42,8 +42,15 @@ if [ ! -f "target/dependency/sqlite-jdbc-3.44.1.0.jar" ]; then
     mvn dependency:copy-dependencies -DoutputDirectory=target/dependency -q
 fi
 
-# Run the application
+# Run the application with JVM arguments for JFoenix compatibility
 echo "🎯 Launching YunFx AutoShell..."
-java --module-path "$JAVAFX_PATH" --add-modules javafx.controls,javafx.fxml -cp "$CLASSPATH" com.yunfx.autoshell.Main
+java --module-path "$JAVAFX_PATH" --add-modules javafx.controls,javafx.fxml \
+     --add-opens java.base/java.lang.reflect=ALL-UNNAMED \
+     --add-opens javafx.controls/com.sun.javafx.scene.control.behavior=ALL-UNNAMED \
+     --add-opens javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED \
+     --add-opens javafx.base/com.sun.javafx.binding=ALL-UNNAMED \
+     --add-opens javafx.base/com.sun.javafx.event=ALL-UNNAMED \
+     --add-opens javafx.graphics/com.sun.javafx.stage=ALL-UNNAMED \
+     -cp "$CLASSPATH" com.yunfx.autoshell.Main
 
 echo "👋 YunFx AutoShell has exited."
