@@ -25,6 +25,36 @@ DESKTOP_DIR="/usr/share/applications"
 
 echo "📁 Installing to: $APP_DIR"
 
+# Check for existing installations and clean them up
+echo "🔍 Checking for existing installations..."
+if [ -d "$APP_DIR" ]; then
+    echo "⚠️  Found existing application directory, removing..."
+    rm -rf "$APP_DIR"
+fi
+
+if [ -f "$BIN_DIR/yunfx-autoshell" ]; then
+    echo "⚠️  Found existing launcher, removing..."
+    rm -f "$BIN_DIR/yunfx-autoshell"
+fi
+
+if [ -f "$ICON_DIR/yunfx-autoshell.png" ]; then
+    echo "⚠️  Found existing icon, removing..."
+    rm -f "$ICON_DIR/yunfx-autoshell.png"
+fi
+
+if [ -f "$DESKTOP_DIR/yunfx-autoshell.desktop" ]; then
+    echo "⚠️  Found existing desktop entry, removing..."
+    rm -f "$DESKTOP_DIR/yunfx-autoshell.desktop"
+fi
+
+if [ -f "/etc/systemd/system/yunfx-autoshell.service" ]; then
+    echo "⚠️  Found existing systemd service, stopping and removing..."
+    systemctl stop yunfx-autoshell.service 2>/dev/null || true
+    systemctl disable yunfx-autoshell.service 2>/dev/null || true
+    rm -f "/etc/systemd/system/yunfx-autoshell.service"
+    systemctl daemon-reload
+fi
+
 # Create application directory
 mkdir -p "$APP_DIR"
 mkdir -p "$APP_DIR/media"

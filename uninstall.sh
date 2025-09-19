@@ -59,6 +59,13 @@ remove_user_installation() {
         print_success "Removed desktop shortcut"
     fi
     
+    # Remove any desktop entries in the project directory
+    PROJECT_DESKTOP="$HOME/Desktop/YunFxAutoShell/yunfx-autoshell.desktop"
+    if [ -f "$PROJECT_DESKTOP" ]; then
+        rm -f "$PROJECT_DESKTOP"
+        print_success "Removed project desktop entry"
+    fi
+    
     # Remove systemd user service
     USER_SERVICE="$HOME/.config/systemd/user/yunfx-autoshell.service"
     if [ -f "$USER_SERVICE" ]; then
@@ -119,6 +126,38 @@ remove_system_installation() {
     
     # Reload systemd daemon
     systemctl daemon-reload 2>/dev/null || true
+}
+
+# Function to perform comprehensive cleanup
+comprehensive_cleanup() {
+    print_status "Performing comprehensive cleanup..."
+    
+    # Search for and remove any remaining desktop entries
+    find "$HOME" -name "*yunfx*autoshell*.desktop" -type f 2>/dev/null | while read -r file; do
+        if [ -f "$file" ]; then
+            rm -f "$file"
+            print_success "Removed: $file"
+        fi
+    done
+    
+    # Search for and remove any remaining desktop entries in system directories (if root)
+    if check_root; then
+        find /usr/share/applications /opt -name "*yunfx*autoshell*.desktop" -type f 2>/dev/null | while read -r file; do
+            if [ -f "$file" ]; then
+                rm -f "$file"
+                print_success "Removed: $file"
+            fi
+        done
+    fi
+    
+    # Remove any cached desktop entries
+    if [ -f "$HOME/.local/share/applications/mimeinfo.cache" ]; then
+        sed -i '/yunfx-autoshell/d' "$HOME/.local/share/applications/mimeinfo.cache" 2>/dev/null || true
+    fi
+    
+    if check_root && [ -f "/usr/share/applications/mimeinfo.cache" ]; then
+        sed -i '/yunfx-autoshell/d' "/usr/share/applications/mimeinfo.cache" 2>/dev/null || true
+    fi
 }
 
 # Function to clean up desktop database
@@ -209,6 +248,10 @@ main() {
         print_warning "To remove system-wide installation, run: sudo $0"
         echo ""
     fi
+    
+    # Perform comprehensive cleanup
+    comprehensive_cleanup
+    echo ""
     
     # Clean up desktop database
     cleanup_desktop_database

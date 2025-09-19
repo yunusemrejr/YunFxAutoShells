@@ -13,6 +13,33 @@ APP_NAME="YunFx AutoShell"
 DESKTOP_FILE="yunfx-autoshell.desktop"
 ICON_FILE="icon.png"
 
+# Check for existing installations and clean them up
+echo "🔍 Checking for existing installations..."
+EXISTING_USER_ENTRY="$HOME/.local/share/applications/yunfx-autoshell.desktop"
+EXISTING_SYSTEM_ENTRY="/usr/share/applications/yunfx-autoshell.desktop"
+EXISTING_DESKTOP_SHORTCUT="$HOME/Desktop/yunfx-autoshell.desktop"
+
+if [ -f "$EXISTING_USER_ENTRY" ]; then
+    echo "⚠️  Found existing user desktop entry, removing..."
+    rm -f "$EXISTING_USER_ENTRY"
+fi
+
+if [ -f "$EXISTING_SYSTEM_ENTRY" ]; then
+    echo "⚠️  Found existing system desktop entry, removing..."
+    sudo rm -f "$EXISTING_SYSTEM_ENTRY" 2>/dev/null || true
+fi
+
+if [ -f "$EXISTING_DESKTOP_SHORTCUT" ]; then
+    echo "⚠️  Found existing desktop shortcut, removing..."
+    rm -f "$EXISTING_DESKTOP_SHORTCUT"
+fi
+
+# Remove any desktop entries in the project directory
+if [ -f "$SCRIPT_DIR/$DESKTOP_FILE" ]; then
+    echo "⚠️  Found existing project desktop entry, removing..."
+    rm -f "$SCRIPT_DIR/$DESKTOP_FILE"
+fi
+
 # Check if icon exists
 if [ ! -f "$SCRIPT_DIR/media/$ICON_FILE" ]; then
     echo "❌ Icon file not found: $SCRIPT_DIR/media/$ICON_FILE"
