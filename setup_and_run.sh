@@ -229,7 +229,21 @@ install_system_wide() {
 # YunFx AutoShell System Launcher
 
 APP_DIR="$APP_DIR"
-cd "\$APP_DIR"
+USER_DATA_DIR="\$HOME/.local/share/yunfx-autoshell"
+
+# Create user data directory if it doesn't exist
+mkdir -p "\$USER_DATA_DIR"
+
+# Copy application files to user directory if needed
+if [ ! -d "\$USER_DATA_DIR/target" ] || [ "\$APP_DIR/target" -nt "\$USER_DATA_DIR/target" ]; then
+    echo "📦 Updating application files..."
+    cp -r "\$APP_DIR/target" "\$USER_DATA_DIR/"
+    cp -r "\$APP_DIR/src" "\$USER_DATA_DIR/"
+    cp "\$APP_DIR/pom.xml" "\$USER_DATA_DIR/"
+fi
+
+# Change to user data directory for write permissions
+cd "\$USER_DATA_DIR"
 
 # Find JavaFX modules
 JAVAFX_PATHS=(
@@ -327,7 +341,21 @@ install_user_only() {
 # YunFx AutoShell Launcher
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+USER_DATA_DIR="$HOME/.local/share/yunfx-autoshell"
+
+# Create user data directory if it doesn't exist
+mkdir -p "$USER_DATA_DIR"
+
+# Copy application files to user directory if needed
+if [ ! -d "$USER_DATA_DIR/target" ] || [ "$SCRIPT_DIR/target" -nt "$USER_DATA_DIR/target" ]; then
+    echo "📦 Updating application files..."
+    cp -r "$SCRIPT_DIR/target" "$USER_DATA_DIR/"
+    cp -r "$SCRIPT_DIR/src" "$USER_DATA_DIR/"
+    cp "$SCRIPT_DIR/pom.xml" "$USER_DATA_DIR/"
+fi
+
+# Change to user data directory for write permissions
+cd "$USER_DATA_DIR"
 
 # Find JavaFX modules
 JAVAFX_PATHS=(

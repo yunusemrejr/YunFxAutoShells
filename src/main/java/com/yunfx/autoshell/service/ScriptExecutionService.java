@@ -167,4 +167,59 @@ public class ScriptExecutionService {
             System.err.println("Failed to make script executable: " + e.getMessage());
         }
     }
+    
+    public ExecutionResult executeScriptInTerminal(Script script) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            Path scriptPath = script.getFilePath();
+            if (!scriptPath.toFile().exists()) {
+                return new ExecutionResult(false, "", "Script file not found: " + scriptPath, -1, 0);
+            }
+            
+            if (!scriptPath.toFile().canExecute()) {
+                return new ExecutionResult(false, "", "Script is not executable: " + scriptPath, -1, 0);
+            }
+            
+            // Try different terminal emulators
+            String[] terminalCommands = {
+                "gnome-terminal -- bash -c 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
+                "xterm -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
+                "konsole -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
+                "xfce4-terminal -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
+                "mate-terminal -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
+                "lxterminal -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'"
+            };
+            
+            ProcessBuilder processBuilder = null;
+            for (String cmd : terminalCommands) {
+                try {
+                    processBuilder = new ProcessBuilder("bash", "-c", cmd);
+                    Process testProcess = processBuilder.start();
+                    testProcess.destroy(); // Just test if the command works
+                    break;
+                } catch (Exception e) {
+                    // Try next terminal
+                    continue;
+                }
+            }
+            
+            if (processBuilder == null) {
+                return new ExecutionResult(false, "", "No suitable terminal emulator found. Please install gnome-terminal, xterm, or another terminal emulator.", -1, 0);
+            }
+            
+            // Execute the terminal command
+            Process process = processBuilder.start();
+            
+            // Wait a bit to see if the terminal opens successfully
+            Thread.sleep(1000);
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            return new ExecutionResult(true, "Terminal opened successfully", "", 0, executionTime);
+            
+        } catch (Exception e) {
+            long executionTime = System.currentTimeMillis() - startTime;
+            return new ExecutionResult(false, "", "Failed to open terminal: " + e.getMessage(), -1, executionTime);
+        }
+    }
 }

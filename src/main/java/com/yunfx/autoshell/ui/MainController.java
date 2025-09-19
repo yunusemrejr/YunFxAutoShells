@@ -18,12 +18,14 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.control.ButtonBar;
 import javafx.scene.layout.*;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +43,7 @@ public class MainController {
     private TableView<ScriptGroup> groupTable;
     private JFXButton refreshButton;
     private JFXButton addGroupButton;
+    private JFXButton removeGroupButton;
     private JFXButton executeGroupButton;
     private JFXButton selectDirectoryButton;
     private Label statusLabel;
@@ -76,6 +79,7 @@ public class MainController {
     private void createUI() {
         BorderPane root = new BorderPane();
         root.setPadding(new Insets(10));
+        root.setStyle("-fx-background-color: #313131;");
         
         // Top toolbar
         HBox toolbar = createToolbar();
@@ -84,6 +88,7 @@ public class MainController {
         // Main content area
         SplitPane mainContent = new SplitPane();
         mainContent.setDividerPositions(0.3, 0.7);
+        mainContent.setStyle("-fx-background-color: #313131;");
         
         // Left panel - Groups
         VBox groupPanel = createGroupPanel();
@@ -99,7 +104,7 @@ public class MainController {
         HBox statusBar = createStatusBar();
         root.setBottom(statusBar);
         
-        Scene scene = new Scene(root);
+        Scene scene = new Scene(root, 1200, 800);
         scene.getStylesheets().add(getClass().getResource("/styles.css").toExternalForm());
         primaryStage.setScene(scene);
     }
@@ -107,38 +112,46 @@ public class MainController {
     private HBox createToolbar() {
         HBox toolbar = new HBox(10);
         toolbar.setAlignment(Pos.CENTER_LEFT);
-        toolbar.setPadding(new Insets(5));
+        toolbar.setPadding(new Insets(10));
+        toolbar.setStyle("-fx-background-color: #313131; -fx-border-color: #666666; -fx-border-width: 0 0 1 0;");
         
         // Directory selection
         selectDirectoryButton = new JFXButton("Select Script Directory");
-        selectDirectoryButton.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white;");
+        selectDirectoryButton.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-weight: bold; -fx-padding: 8 16;");
         selectDirectoryButton.setOnAction(this::selectDirectory);
         
         // Search field
         searchField = new JFXTextField();
         searchField.setPromptText("Search scripts...");
         searchField.setPrefWidth(200);
+        searchField.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-prompt-text-fill: #666666; -fx-padding: 8 12;");
         searchField.textProperty().addListener((obs, oldVal, newVal) -> filterScripts());
         
         // Refresh button
         refreshButton = new JFXButton("Refresh");
-        refreshButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white;");
+        refreshButton.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-weight: bold; -fx-padding: 8 16;");
         refreshButton.setOnAction(e -> refreshScripts());
         
         // Add group button
         addGroupButton = new JFXButton("Add Group");
-        addGroupButton.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white;");
+        addGroupButton.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-weight: bold; -fx-padding: 8 16;");
         addGroupButton.setOnAction(this::addGroup);
+        
+        // Remove group button
+        removeGroupButton = new JFXButton("Remove Group");
+        removeGroupButton.setStyle("-fx-background-color: #ec503b; -fx-text-fill: #ffffff; -fx-font-weight: bold; -fx-padding: 8 16;");
+        removeGroupButton.setOnAction(this::removeSelectedGroup);
+        removeGroupButton.setDisable(true);
         
         // Execute group button
         executeGroupButton = new JFXButton("Execute Group");
-        executeGroupButton.setStyle("-fx-background-color: #F44336; -fx-text-fill: white;");
+        executeGroupButton.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-weight: bold; -fx-padding: 8 16;");
         executeGroupButton.setOnAction(this::executeSelectedGroup);
         executeGroupButton.setDisable(true);
         
         toolbar.getChildren().addAll(
             selectDirectoryButton, searchField, refreshButton, 
-            addGroupButton, executeGroupButton
+            addGroupButton, removeGroupButton, executeGroupButton
         );
         
         return toolbar;
@@ -146,29 +159,34 @@ public class MainController {
     
     private VBox createGroupPanel() {
         VBox groupPanel = new VBox(10);
-        groupPanel.setPadding(new Insets(10));
+        groupPanel.setPadding(new Insets(15));
+        groupPanel.setStyle("-fx-background-color: #313131; -fx-border-color: #666666; -fx-border-width: 1; -fx-border-radius: 5;");
         
         Label groupLabel = new Label("Script Groups");
-        groupLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
+        groupLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #ffffff;");
         
         // Group filter combo
         groupFilterCombo = new JFXComboBox<>();
         groupFilterCombo.setPromptText("Filter by group");
         groupFilterCombo.getItems().add("All Scripts");
+        groupFilterCombo.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-prompt-text-fill: #666666; -fx-padding: 8 12;");
         groupFilterCombo.setOnAction(e -> filterScripts());
         
         // Groups table
         groupTable = new TableView<>();
         groupTable.setPrefHeight(400);
+        groupTable.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131;");
         
         TableColumn<ScriptGroup, String> groupNameCol = new TableColumn<>("Group Name");
         groupNameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
         groupNameCol.setPrefWidth(150);
+        groupNameCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         
         TableColumn<ScriptGroup, Integer> scriptCountCol = new TableColumn<>("Scripts");
         scriptCountCol.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleIntegerProperty(cellData.getValue().getScripts().size()).asObject());
         scriptCountCol.setPrefWidth(80);
+        scriptCountCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         
         groupTable.getColumns().addAll(groupNameCol, scriptCountCol);
         groupTable.setItems(groups);
@@ -179,9 +197,20 @@ public class MainController {
                 groupFilterCombo.setValue(newVal.getName());
                 filterScripts();
                 executeGroupButton.setDisable(false);
+                removeGroupButton.setDisable(false);
             } else {
                 executeGroupButton.setDisable(true);
+                removeGroupButton.setDisable(true);
             }
+        });
+        
+        // Group filter combo listener
+        groupFilterCombo.valueProperty().addListener((obs, oldVal, newVal) -> {
+            filterScripts();
+            // Enable execute button if a specific group is selected (not "All Scripts")
+            boolean isGroupSelected = newVal != null && !newVal.equals("All Scripts");
+            executeGroupButton.setDisable(!isGroupSelected);
+            removeGroupButton.setDisable(!isGroupSelected);
         });
         
         groupPanel.getChildren().addAll(groupLabel, groupFilterCombo, groupTable);
@@ -190,43 +219,53 @@ public class MainController {
     
     private VBox createScriptPanel() {
         VBox scriptPanel = new VBox(10);
-        scriptPanel.setPadding(new Insets(10));
+        scriptPanel.setPadding(new Insets(15));
+        scriptPanel.setStyle("-fx-background-color: #313131; -fx-border-color: #666666; -fx-border-width: 1; -fx-border-radius: 5;");
         
         Label scriptLabel = new Label("Scripts");
-        scriptLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
+        scriptLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #ffffff;");
         
         // Scripts table
         scriptTable = new TableView<>();
         scriptTable.setPrefHeight(400);
+        scriptTable.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131;");
         
         TableColumn<Script, String> nameCol = new TableColumn<>("Name");
         nameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
         nameCol.setPrefWidth(200);
+        nameCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         
         TableColumn<Script, String> descriptionCol = new TableColumn<>("Description");
         descriptionCol.setCellValueFactory(new PropertyValueFactory<>("description"));
         descriptionCol.setPrefWidth(250);
+        descriptionCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         
         TableColumn<Script, String> pathCol = new TableColumn<>("Path");
         pathCol.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleStringProperty(cellData.getValue().getFilePath().toString()));
         pathCol.setPrefWidth(300);
+        pathCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         
         TableColumn<Script, Boolean> executableCol = new TableColumn<>("Executable");
         executableCol.setCellValueFactory(new PropertyValueFactory<>("executable"));
         executableCol.setPrefWidth(100);
+        executableCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         
         TableColumn<Script, Void> actionsCol = new TableColumn<>("Actions");
         actionsCol.setPrefWidth(150);
+        actionsCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         actionsCol.setCellFactory(param -> new TableCell<Script, Void>() {
             private final JFXButton executeBtn = new JFXButton("Execute");
+            private final JFXButton terminalBtn = new JFXButton("Terminal");
             private final JFXButton addToGroupBtn = new JFXButton("Add to Group");
             
             {
-                executeBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 10px;");
-                addToGroupBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-size: 10px;");
+                executeBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 4 8;");
+                terminalBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 4 8;");
+                addToGroupBtn.setStyle("-fx-background-color: #ec503b; -fx-text-fill: #ffffff; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 4 8;");
                 
                 executeBtn.setOnAction(e -> executeScript(getTableView().getItems().get(getIndex())));
+                terminalBtn.setOnAction(e -> executeScriptInTerminal(getTableView().getItems().get(getIndex())));
                 addToGroupBtn.setOnAction(e -> addScriptToGroup(getTableView().getItems().get(getIndex())));
             }
             
@@ -236,8 +275,8 @@ public class MainController {
                 if (empty) {
                     setGraphic(null);
                 } else {
-                    HBox buttons = new HBox(5);
-                    buttons.getChildren().addAll(executeBtn, addToGroupBtn);
+                    HBox buttons = new HBox(3);
+                    buttons.getChildren().addAll(executeBtn, terminalBtn, addToGroupBtn);
                     setGraphic(buttons);
                 }
             }
@@ -253,12 +292,15 @@ public class MainController {
     private HBox createStatusBar() {
         HBox statusBar = new HBox(10);
         statusBar.setAlignment(Pos.CENTER_LEFT);
-        statusBar.setPadding(new Insets(5));
+        statusBar.setPadding(new Insets(10));
+        statusBar.setStyle("-fx-background-color: #313131; -fx-border-color: #666666; -fx-border-width: 1 0 0 0;");
         
         statusLabel = new Label("Ready");
+        statusLabel.setStyle("-fx-text-fill: #ffffff; -fx-font-weight: bold;");
         progressBar = new ProgressBar();
         progressBar.setVisible(false);
         progressBar.setPrefWidth(200);
+        progressBar.setStyle("-fx-accent: #ec503b;");
         
         statusBar.getChildren().addAll(statusLabel, progressBar);
         return statusBar;
@@ -390,6 +432,22 @@ public class MainController {
         }
     }
     
+    private void refreshGroups() {
+        try {
+            // Reload groups from database
+            groups.clear();
+            groups.addAll(dbManager.getAllGroups());
+            
+            // Update group filter combo
+            groupFilterCombo.getItems().clear();
+            groupFilterCombo.getItems().add("All Scripts");
+            groups.forEach(group -> groupFilterCombo.getItems().add(group.getName()));
+            
+        } catch (Exception e) {
+            showError("Error refreshing groups", e.getMessage());
+        }
+    }
+    
     private void filterScripts() {
         String searchText = searchField.getText().toLowerCase();
         String selectedGroup = groupFilterCombo.getValue();
@@ -397,19 +455,36 @@ public class MainController {
         scripts.clear();
         
         try {
-            List<Script> allScripts = dbManager.getAllScripts();
+            List<Script> scriptsToShow;
             
-            for (Script script : allScripts) {
+            if (selectedGroup == null || selectedGroup.equals("All Scripts")) {
+                // Show all scripts
+                scriptsToShow = dbManager.getAllScripts();
+            } else {
+                // Find the selected group and get its scripts
+                ScriptGroup selectedGroupObj = null;
+                for (ScriptGroup group : groups) {
+                    if (group.getName().equals(selectedGroup)) {
+                        selectedGroupObj = group;
+                        break;
+                    }
+                }
+                
+                if (selectedGroupObj != null) {
+                    // Get scripts for this specific group from database
+                    scriptsToShow = dbManager.getScriptsByGroup(selectedGroupObj.getId());
+                } else {
+                    scriptsToShow = new ArrayList<>();
+                }
+            }
+            
+            // Apply search filter
+            for (Script script : scriptsToShow) {
                 boolean matchesSearch = searchText.isEmpty() || 
                     script.getName().toLowerCase().contains(searchText) ||
                     script.getDescription().toLowerCase().contains(searchText);
                 
-                boolean matchesGroup = selectedGroup == null || 
-                    selectedGroup.equals("All Scripts") ||
-                    (groupTable.getSelectionModel().getSelectedItem() != null &&
-                     groupTable.getSelectionModel().getSelectedItem().containsScript(script));
-                
-                if (matchesSearch && matchesGroup) {
+                if (matchesSearch) {
                     scripts.add(script);
                 }
             }
@@ -438,6 +513,62 @@ public class MainController {
         }
     }
     
+    private void removeSelectedGroup(ActionEvent event) {
+        String selectedGroupName = groupFilterCombo.getValue();
+        if (selectedGroupName == null || selectedGroupName.equals("All Scripts")) {
+            showInfo("No Group Selected", "Please select a specific group to remove.");
+            return;
+        }
+        
+        // Find the selected group object
+        ScriptGroup selectedGroup = null;
+        for (ScriptGroup group : groups) {
+            if (group.getName().equals(selectedGroupName)) {
+                selectedGroup = group;
+                break;
+            }
+        }
+        
+        if (selectedGroup == null) {
+            showInfo("Group Not Found", "The selected group could not be found.");
+            return;
+        }
+        
+        // Confirm deletion
+        Alert confirmDialog = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmDialog.setTitle("Remove Group");
+        confirmDialog.setHeaderText("Remove group: " + selectedGroup.getName());
+        confirmDialog.setContentText("This will remove the group but keep all scripts in the system.\n\nAre you sure you want to continue?");
+        
+        Optional<ButtonType> result = confirmDialog.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            try {
+                // Remove group from database
+                dbManager.removeGroup(selectedGroup.getId());
+                
+                // Remove from UI
+                groups.remove(selectedGroup);
+                
+                // Update group filter combo
+                groupFilterCombo.getItems().remove(selectedGroupName);
+                groupFilterCombo.setValue("All Scripts");
+                
+                // Clear selection and refresh
+                groupTable.getSelectionModel().clearSelection();
+                filterScripts();
+                
+                // Disable buttons
+                executeGroupButton.setDisable(true);
+                removeGroupButton.setDisable(true);
+                
+                statusLabel.setText("Group removed: " + selectedGroup.getName());
+                
+            } catch (Exception e) {
+                showError("Error removing group", e.getMessage());
+            }
+        }
+    }
+    
     private void addScriptToGroup(Script script) {
         if (groups.isEmpty()) {
             showInfo("No Groups", "Please create a group first.");
@@ -456,6 +587,14 @@ public class MainController {
                 group.addScript(script);
                 dbManager.saveGroup(group);
                 dbManager.addScriptToGroup(group.getId(), script.getFilePath().toString());
+                
+                // Refresh the groups to show updated script count
+                refreshGroups();
+                
+                // Update the group filter to show the updated group
+                groupFilterCombo.setValue(group.getName());
+                filterScripts();
+                
                 statusLabel.setText("Script added to group: " + group.getName());
             } catch (Exception e) {
                 showError("Error adding script to group", e.getMessage());
@@ -482,30 +621,93 @@ public class MainController {
         });
     }
     
+    private void executeScriptInTerminal(Script script) {
+        statusLabel.setText("Opening terminal for: " + script.getName());
+        progressBar.setVisible(true);
+        progressBar.setProgress(-1);
+        
+        // Execute in a separate thread to avoid blocking UI
+        new Thread(() -> {
+            ScriptExecutionService.ExecutionResult result = executionService.executeScriptInTerminal(script);
+            
+            Platform.runLater(() -> {
+                progressBar.setVisible(false);
+                if (result.isSuccess()) {
+                    statusLabel.setText("Terminal opened for: " + script.getName());
+                    showInfo("Terminal Opened", "A terminal window has opened and is executing: " + script.getName() + 
+                            "\n\nThe terminal will remain open so you can see the script output and interact with it.");
+                } else {
+                    statusLabel.setText("Failed to open terminal for: " + script.getName());
+                    showError("Terminal Error", "Failed to open terminal for " + script.getName() + ":\n" + result.getError());
+                }
+            });
+        }).start();
+    }
+    
     private void executeSelectedGroup(ActionEvent event) {
-        ScriptGroup selectedGroup = groupTable.getSelectionModel().getSelectedItem();
+        String selectedGroupName = groupFilterCombo.getValue();
+        if (selectedGroupName == null || selectedGroupName.equals("All Scripts")) {
+            showInfo("No Group Selected", "Please select a specific group to execute.");
+            return;
+        }
+        
+        // Find the selected group object
+        ScriptGroup selectedGroup = null;
+        for (ScriptGroup group : groups) {
+            if (group.getName().equals(selectedGroupName)) {
+                selectedGroup = group;
+                break;
+            }
+        }
+        
         if (selectedGroup == null) {
-            showInfo("No Group Selected", "Please select a group to execute.");
+            showInfo("Group Not Found", "The selected group could not be found.");
             return;
         }
         
-        if (selectedGroup.getScripts().isEmpty()) {
-            showInfo("Empty Group", "The selected group contains no scripts.");
-            return;
-        }
-        
-        Alert confirmDialog = new Alert(Alert.AlertType.CONFIRMATION);
-        confirmDialog.setTitle("Execute Group");
-        confirmDialog.setHeaderText("Execute all scripts in group: " + selectedGroup.getName());
-        confirmDialog.setContentText("This will execute " + selectedGroup.getScripts().size() + " scripts sequentially.");
-        
-        Optional<ButtonType> result = confirmDialog.showAndWait();
-        if (result.isPresent() && result.get() == ButtonType.OK) {
-            executeGroupSequentially(selectedGroup);
+        // Get scripts for this group from database
+        try {
+            List<Script> groupScripts = dbManager.getScriptsByGroup(selectedGroup.getId());
+            if (groupScripts.isEmpty()) {
+                showInfo("Empty Group", "The selected group contains no scripts.");
+                return;
+            }
+            
+            // Create custom dialog with execution choice
+            Alert executionChoiceDialog = new Alert(Alert.AlertType.CONFIRMATION);
+            executionChoiceDialog.setTitle("Execute Group");
+            executionChoiceDialog.setHeaderText("Execute all scripts in group: " + selectedGroup.getName());
+            executionChoiceDialog.setContentText("This will execute " + groupScripts.size() + " scripts sequentially.\n\nHow would you like to execute them?");
+            
+            // Create custom buttons
+            ButtonType guiButton = new ButtonType("GUI (Background)");
+            ButtonType terminalButton = new ButtonType("Terminal Windows");
+            ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+            
+            executionChoiceDialog.getButtonTypes().setAll(guiButton, terminalButton, cancelButton);
+            
+            Optional<ButtonType> result = executionChoiceDialog.showAndWait();
+            if (result.isPresent()) {
+                if (result.get() == guiButton) {
+                    executeGroupSequentially(selectedGroup, false);
+                } else if (result.get() == terminalButton) {
+                    executeGroupSequentially(selectedGroup, true);
+                }
+            }
+        } catch (Exception e) {
+            showError("Error loading group scripts", e.getMessage());
         }
     }
     
-    private void executeGroupSequentially(ScriptGroup group) {
+    private void executeGroupSequentially(ScriptGroup group, boolean useTerminal) {
+        if (useTerminal) {
+            executeGroupInTerminals(group);
+        } else {
+            executeGroupInGUI(group);
+        }
+    }
+    
+    private void executeGroupInGUI(ScriptGroup group) {
         statusLabel.setText("Executing group: " + group.getName());
         progressBar.setVisible(true);
         progressBar.setProgress(0);
@@ -523,6 +725,59 @@ public class MainController {
                 });
             }
         );
+    }
+    
+    private void executeGroupInTerminals(ScriptGroup group) {
+        statusLabel.setText("Opening terminals for group: " + group.getName());
+        progressBar.setVisible(true);
+        progressBar.setProgress(-1);
+        
+        // Execute in a separate thread to avoid blocking UI
+        new Thread(() -> {
+            final List<Script> scripts = group.getScripts();
+            final int[] successCount = {0};
+            final int[] failCount = {0};
+            
+            for (int i = 0; i < scripts.size(); i++) {
+                final Script script = scripts.get(i);
+                final int currentIndex = i;
+                
+                Platform.runLater(() -> {
+                    statusLabel.setText("Opening terminal " + (currentIndex + 1) + " of " + scripts.size() + ": " + script.getName());
+                });
+                
+                ScriptExecutionService.ExecutionResult result = executionService.executeScriptInTerminal(script);
+                
+                if (result.isSuccess()) {
+                    successCount[0]++;
+                } else {
+                    failCount[0]++;
+                }
+                
+                // Small delay between opening terminals
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            
+            final int finalSuccessCount = successCount[0];
+            final int finalFailCount = failCount[0];
+            
+            Platform.runLater(() -> {
+                progressBar.setVisible(false);
+                statusLabel.setText("Group execution completed: " + group.getName() + 
+                    " (" + finalSuccessCount + " terminals opened, " + finalFailCount + " failed)");
+                
+                if (finalFailCount > 0) {
+                    showInfo("Group Execution Summary", 
+                        "Group execution completed with " + finalSuccessCount + " terminals opened successfully and " + 
+                        finalFailCount + " failures.\n\nCheck the status messages for details about any failures.");
+                }
+            });
+        }).start();
     }
     
     private void showError(String title, String message) {

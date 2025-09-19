@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:autoshell.db";
+    private static final String DB_URL = "jdbc:sqlite:" + System.getProperty("user.home") + "/.local/share/yunfx-autoshell/autoshell.db";
     private static DatabaseManager instance;
     private Connection connection;
 
@@ -25,10 +25,38 @@ public class DatabaseManager {
 
     private void initializeDatabase() {
         try {
-            connection = DriverManager.getConnection(DB_URL);
+            // Ensure the database directory exists
+            String dbPath = System.getProperty("user.home") + "/.local/share/yunfx-autoshell/autoshell.db";
+            java.io.File dbFile = new java.io.File(dbPath);
+            java.io.File dbDir = dbFile.getParentFile();
+            if (dbDir != null && !dbDir.exists()) {
+                boolean created = dbDir.mkdirs();
+                if (!created) {
+                    throw new RuntimeException("Failed to create database directory: " + dbDir.getAbsolutePath());
+                }
+            }
+            
+            // Load SQLite JDBC driver
+            try {
+                Class.forName("org.sqlite.JDBC");
+            } catch (ClassNotFoundException e) {
+                throw new RuntimeException("SQLite JDBC driver not found. Please ensure sqlite-jdbc is in the classpath.", e);
+            }
+            
+            // Create connection with proper URL
+            String dbUrl = "jdbc:sqlite:" + dbPath;
+            connection = DriverManager.getConnection(dbUrl);
+            
+            // Enable foreign keys
+            try (Statement stmt = connection.createStatement()) {
+                stmt.execute("PRAGMA foreign_keys = ON");
+            }
+            
             createTables();
+            
+            System.out.println("Database initialized successfully at: " + dbPath);
         } catch (SQLException e) {
-            throw new RuntimeException("Failed to initialize database", e);
+            throw new RuntimeException("Failed to initialize database: " + e.getMessage(), e);
         }
     }
 
@@ -74,10 +102,15 @@ public class DatabaseManager {
         """;
 
         try (Statement stmt = connection.createStatement()) {
+            System.out.println("Creating script_groups table...");
             stmt.execute(createGroupsTable);
+            System.out.println("Creating scripts table...");
             stmt.execute(createScriptsTable);
+            System.out.println("Creating group_scripts table...");
             stmt.execute(createGroupScriptsTable);
+            System.out.println("Creating script_tags table...");
             stmt.execute(createScriptTagsTable);
+            System.out.println("All tables created successfully!");
         }
     }
 
@@ -303,6 +336,53 @@ public class DatabaseManager {
             try (ResultSet rs = stmt.executeQuery()) {
                 return rs.next() ? rs.getLong("id") : null;
             }
+        }
+    }
+
+    public List<Script> getScriptsByGroup(Long groupId) throws SQLException {
+        List<Script> scripts = new ArrayList<>();
+        String sql = """
+            SELECT s.* FROM scripts s
+            JOIN group_scripts gs ON s.id = gs.script_id
+            WHERE gs.group_id = ?
+            ORDER BY s.name
+        """;
+        
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setLong(1, groupId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Script script = new Script();
+                    script.setName(rs.getString("name"));
+                    script.setDescription(rs.getString("description"));
+                    script.setFilePath(java.nio.file.Paths.get(rs.getString("file_path")));
+                    if (rs.getString("last_modified") != null) {
+                        script.setLastModified(LocalDateTime.parse(rs.getString("last_modified")));
+                    }
+                    script.setExecutable(rs.getBoolean("executable"));
+                    script.setContent(rs.getString("content"));
+                    
+                    loadScriptTags(script);
+                    scripts.add(script);
+                }
+            }
+        }
+        return scripts;
+    }
+
+    public void removeGroup(Long groupId) throws SQLException {
+        // First remove all script associations for this group
+        String deleteGroupScriptsSql = "DELETE FROM group_scripts WHERE group_id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(deleteGroupScriptsSql)) {
+            stmt.setLong(1, groupId);
+            stmt.executeUpdate();
+        }
+        
+        // Then remove the group itself
+        String deleteGroupSql = "DELETE FROM script_groups WHERE id = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(deleteGroupSql)) {
+            stmt.setLong(1, groupId);
+            stmt.executeUpdate();
         }
     }
 
