@@ -180,59 +180,75 @@ public class ScriptExecutionService {
         
         try {
             Path scriptPath = script.getFilePath();
+            System.out.println("Executing script: " + script.getName() + " at " + scriptPath);
+            
             if (!scriptPath.toFile().exists()) {
+                System.err.println("Script file not found: " + scriptPath);
                 return new ExecutionResult(false, "", "Script file not found: " + scriptPath, -1, 0);
             }
             
             if (!scriptPath.toFile().canExecute()) {
+                System.err.println("Script is not executable: " + scriptPath);
                 return new ExecutionResult(false, "", "Script is not executable: " + scriptPath, -1, 0);
             }
             
             // Check if script requires sudo
             boolean requiresSudo = analysisService.requiresSudo(script);
+            System.out.println("Script " + script.getName() + " requires sudo: " + requiresSudo);
             
             ProcessBuilder processBuilder;
             if (requiresSudo) {
                 // Execute with sudo
+                System.out.println("Executing with sudo: " + scriptPath);
                 processBuilder = new ProcessBuilder("sudo", "-S", scriptPath.toString());
             } else {
                 // Execute normally
+                System.out.println("Executing normally: " + scriptPath);
                 processBuilder = new ProcessBuilder(scriptPath.toString());
             }
             
             processBuilder.directory(scriptPath.getParent().toFile());
             
+            System.out.println("Starting process...");
             Process process = processBuilder.start();
             
             // If sudo is required, send the password
             if (requiresSudo) {
+                System.out.println("Sending sudo password...");
                 try (OutputStreamWriter writer = new OutputStreamWriter(process.getOutputStream())) {
                     writer.write(sudoManager.getPasswordInput(requiresSudo));
                     writer.flush();
                 }
+                System.out.println("Sudo password sent");
             }
             
             // Read output
             StringBuilder output = new StringBuilder();
             StringBuilder error = new StringBuilder();
             
+            System.out.println("Reading process output...");
             try (BufferedReader outputReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
                  BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
                 
                 String line;
                 while ((line = outputReader.readLine()) != null) {
                     output.append(line).append("\n");
+                    System.out.println("Output: " + line);
                 }
                 
                 while ((line = errorReader.readLine()) != null) {
                     error.append(line).append("\n");
+                    System.err.println("Error: " + line);
                 }
             }
             
+            System.out.println("Waiting for process to complete...");
             int exitCode = process.waitFor();
             long executionTime = System.currentTimeMillis() - startTime;
             
             boolean success = exitCode == 0;
+            System.out.println("Script " + script.getName() + " completed with exit code: " + exitCode + " (success: " + success + ")");
+            
             String resultMessage = success ? 
                 "Script executed successfully" + (requiresSudo ? " (with sudo)" : "") : 
                 "Script execution failed";
@@ -241,6 +257,8 @@ public class ScriptExecutionService {
             
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;
+            System.err.println("Exception executing script " + script.getName() + ": " + e.getMessage());
+            e.printStackTrace();
             return new ExecutionResult(false, "", "Failed to execute script: " + e.getMessage(), -1, executionTime);
         }
     }

@@ -121,21 +121,29 @@ public class SudoPasswordManager {
         // This should not be called on background thread, but handle gracefully
         System.err.println("Sudo password requested on background thread: " + reason);
         
-        // Use Platform.runLater to switch to FX thread
+        // Use a more robust approach with CountDownLatch
+        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
         final boolean[] result = {false};
+        
         Platform.runLater(() -> {
-            result[0] = requestPasswordOnFXThread(reason);
+            try {
+                result[0] = requestPasswordOnFXThread(reason);
+            } finally {
+                latch.countDown();
+            }
         });
         
         // Wait for the result (with timeout)
-        long startTime = System.currentTimeMillis();
-        while (!result[0] && (System.currentTimeMillis() - startTime) < 30000) { // 30 second timeout
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
+        try {
+            boolean completed = latch.await(60, java.util.concurrent.TimeUnit.SECONDS); // 60 second timeout
+            if (!completed) {
+                System.err.println("Password request timed out");
+                return false;
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("Password request interrupted");
+            return false;
         }
         
         return result[0];
