@@ -13,6 +13,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 public class ScriptExecutionService {
+    private final ScriptAnalysisService analysisService;
+    private final SudoPasswordManager sudoManager;
+    
+    public ScriptExecutionService() {
+        this.analysisService = new ScriptAnalysisService();
+        this.sudoManager = SudoPasswordManager.getInstance();
+    }
     
     public static class ExecutionResult {
         private final boolean success;
@@ -168,6 +175,76 @@ public class ScriptExecutionService {
         }
     }
     
+    public ExecutionResult executeScriptWithSudo(Script script) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            Path scriptPath = script.getFilePath();
+            if (!scriptPath.toFile().exists()) {
+                return new ExecutionResult(false, "", "Script file not found: " + scriptPath, -1, 0);
+            }
+            
+            if (!scriptPath.toFile().canExecute()) {
+                return new ExecutionResult(false, "", "Script is not executable: " + scriptPath, -1, 0);
+            }
+            
+            // Check if script requires sudo
+            boolean requiresSudo = analysisService.requiresSudo(script);
+            
+            ProcessBuilder processBuilder;
+            if (requiresSudo) {
+                // Execute with sudo
+                processBuilder = new ProcessBuilder("sudo", "-S", scriptPath.toString());
+            } else {
+                // Execute normally
+                processBuilder = new ProcessBuilder(scriptPath.toString());
+            }
+            
+            processBuilder.directory(scriptPath.getParent().toFile());
+            
+            Process process = processBuilder.start();
+            
+            // If sudo is required, send the password
+            if (requiresSudo) {
+                try (OutputStreamWriter writer = new OutputStreamWriter(process.getOutputStream())) {
+                    writer.write(sudoManager.getPasswordInput(requiresSudo));
+                    writer.flush();
+                }
+            }
+            
+            // Read output
+            StringBuilder output = new StringBuilder();
+            StringBuilder error = new StringBuilder();
+            
+            try (BufferedReader outputReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                 BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                
+                String line;
+                while ((line = outputReader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+                
+                while ((line = errorReader.readLine()) != null) {
+                    error.append(line).append("\n");
+                }
+            }
+            
+            int exitCode = process.waitFor();
+            long executionTime = System.currentTimeMillis() - startTime;
+            
+            boolean success = exitCode == 0;
+            String resultMessage = success ? 
+                "Script executed successfully" + (requiresSudo ? " (with sudo)" : "") : 
+                "Script execution failed";
+            
+            return new ExecutionResult(success, output.toString(), error.toString(), exitCode, executionTime);
+            
+        } catch (Exception e) {
+            long executionTime = System.currentTimeMillis() - startTime;
+            return new ExecutionResult(false, "", "Failed to execute script: " + e.getMessage(), -1, executionTime);
+        }
+    }
+
     public ExecutionResult executeScriptInTerminal(Script script) {
         long startTime = System.currentTimeMillis();
         
@@ -181,14 +258,28 @@ public class ScriptExecutionService {
                 return new ExecutionResult(false, "", "Script is not executable: " + scriptPath, -1, 0);
             }
             
+            // Check if script requires sudo
+            boolean requiresSudo = analysisService.requiresSudo(script);
+            String sudoPrefix = sudoManager.getSudoPrefix(requiresSudo);
+            
+            // Build command with sudo if needed
+            String scriptCommand;
+            if (requiresSudo && !sudoPrefix.isEmpty()) {
+                scriptCommand = "cd \"" + scriptPath.getParent() + "\" && echo '" + 
+                    sudoManager.getPasswordInput(requiresSudo).trim() + "' | " + 
+                    sudoPrefix + " \"" + scriptPath + "\"";
+            } else {
+                scriptCommand = "cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"";
+            }
+            
             // Try different terminal emulators
             String[] terminalCommands = {
-                "gnome-terminal -- bash -c 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
-                "xterm -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
-                "konsole -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
-                "xfce4-terminal -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
-                "mate-terminal -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'",
-                "lxterminal -e 'cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"; exec bash'"
+                "gnome-terminal -- bash -c '" + scriptCommand + "; exec bash'",
+                "xterm -e 'bash -c \"" + scriptCommand + "; exec bash\"'",
+                "konsole -e 'bash -c \"" + scriptCommand + "; exec bash\"'",
+                "xfce4-terminal -e 'bash -c \"" + scriptCommand + "; exec bash\"'",
+                "mate-terminal -e 'bash -c \"" + scriptCommand + "; exec bash\"'",
+                "lxterminal -e 'bash -c \"" + scriptCommand + "; exec bash\"'"
             };
             
             ProcessBuilder processBuilder = null;
@@ -215,7 +306,8 @@ public class ScriptExecutionService {
             Thread.sleep(1000);
             
             long executionTime = System.currentTimeMillis() - startTime;
-            return new ExecutionResult(true, "Terminal opened successfully", "", 0, executionTime);
+            return new ExecutionResult(true, "Terminal opened successfully" + 
+                (requiresSudo ? " (with sudo)" : ""), "", 0, executionTime);
             
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;

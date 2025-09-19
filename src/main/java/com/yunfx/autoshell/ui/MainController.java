@@ -6,6 +6,8 @@ import com.yunfx.autoshell.model.Script;
 import com.yunfx.autoshell.model.ScriptGroup;
 import com.yunfx.autoshell.service.ScriptDiscoveryService;
 import com.yunfx.autoshell.service.ScriptExecutionService;
+import com.yunfx.autoshell.service.ScriptAnalysisService;
+import com.yunfx.autoshell.service.SudoPasswordManager;
 import com.yunfx.autoshell.service.SudoService;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -603,44 +605,124 @@ public class MainController {
     }
     
     private void executeScript(Script script) {
-        statusLabel.setText("Executing: " + script.getName());
-        progressBar.setVisible(true);
-        progressBar.setProgress(-1);
-        
-        executionService.executeScriptAsync(script).thenAccept(result -> {
-            Platform.runLater(() -> {
-                progressBar.setVisible(false);
-                if (result.isSuccess()) {
-                    statusLabel.setText("Script executed successfully: " + script.getName());
-                    showInfo("Execution Success", "Script executed successfully.\nOutput:\n" + result.getOutput());
-                } else {
-                    statusLabel.setText("Script execution failed: " + script.getName());
-                    showError("Execution Failed", "Script execution failed.\nError:\n" + result.getError());
-                }
-            });
-        });
-    }
-    
-    private void executeScriptInTerminal(Script script) {
-        statusLabel.setText("Opening terminal for: " + script.getName());
+        statusLabel.setText("Analyzing script: " + script.getName());
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
         
         // Execute in a separate thread to avoid blocking UI
         new Thread(() -> {
-            ScriptExecutionService.ExecutionResult result = executionService.executeScriptInTerminal(script);
-            
-            Platform.runLater(() -> {
-                progressBar.setVisible(false);
-                if (result.isSuccess()) {
-                    statusLabel.setText("Terminal opened for: " + script.getName());
-                    showInfo("Terminal Opened", "A terminal window has opened and is executing: " + script.getName() + 
-                            "\n\nThe terminal will remain open so you can see the script output and interact with it.");
-                } else {
-                    statusLabel.setText("Failed to open terminal for: " + script.getName());
-                    showError("Terminal Error", "Failed to open terminal for " + script.getName() + ":\n" + result.getError());
+            try {
+                // Analyze script for sudo requirements
+                ScriptAnalysisService analysisService = new ScriptAnalysisService();
+                boolean requiresSudo = analysisService.requiresSudo(script);
+                
+                // Request sudo password if needed
+                if (requiresSudo) {
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Requesting sudo password for script: " + script.getName());
+                    });
+                    
+                    SudoPasswordManager sudoManager = SudoPasswordManager.getInstance();
+                    boolean passwordObtained = sudoManager.requestSudoPassword(
+                        "Script '" + script.getName() + "' requires sudo privileges");
+                    
+                    if (!passwordObtained) {
+                        Platform.runLater(() -> {
+                            progressBar.setVisible(false);
+                            statusLabel.setText("Script execution cancelled - sudo password required");
+                            showInfo("Execution Cancelled", "Sudo password is required for this script.");
+                        });
+                        return;
+                    }
                 }
-            });
+                
+                Platform.runLater(() -> {
+                    statusLabel.setText("Executing script: " + script.getName() + 
+                        (requiresSudo ? " (with sudo)" : ""));
+                });
+                
+                ScriptExecutionService.ExecutionResult result = executionService.executeScriptWithSudo(script);
+                
+                Platform.runLater(() -> {
+                    progressBar.setVisible(false);
+                    if (result.isSuccess()) {
+                        statusLabel.setText("Script executed successfully: " + script.getName());
+                        showInfo("Script Execution", "Script executed successfully!\n\nOutput:\n" + result.getOutput());
+                    } else {
+                        statusLabel.setText("Script execution failed: " + script.getName());
+                        showError("Script Execution Failed", "Script execution failed!\n\nError:\n" + result.getError());
+                    }
+                });
+                
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    progressBar.setVisible(false);
+                    statusLabel.setText("Error executing script: " + e.getMessage());
+                    showError("Script Execution Error", e.getMessage());
+                });
+            }
+        }).start();
+    }
+    
+    private void executeScriptInTerminal(Script script) {
+        statusLabel.setText("Analyzing script: " + script.getName());
+        progressBar.setVisible(true);
+        progressBar.setProgress(-1);
+        
+        // Execute in a separate thread to avoid blocking UI
+        new Thread(() -> {
+            try {
+                // Analyze script for sudo requirements
+                ScriptAnalysisService analysisService = new ScriptAnalysisService();
+                boolean requiresSudo = analysisService.requiresSudo(script);
+                
+                // Request sudo password if needed
+                if (requiresSudo) {
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Requesting sudo password for script: " + script.getName());
+                    });
+                    
+                    SudoPasswordManager sudoManager = SudoPasswordManager.getInstance();
+                    boolean passwordObtained = sudoManager.requestSudoPassword(
+                        "Script '" + script.getName() + "' requires sudo privileges");
+                    
+                    if (!passwordObtained) {
+                        Platform.runLater(() -> {
+                            progressBar.setVisible(false);
+                            statusLabel.setText("Terminal execution cancelled - sudo password required");
+                            showInfo("Execution Cancelled", "Sudo password is required for this script.");
+                        });
+                        return;
+                    }
+                }
+                
+                Platform.runLater(() -> {
+                    statusLabel.setText("Opening terminal for: " + script.getName() + 
+                        (requiresSudo ? " (with sudo)" : ""));
+                });
+                
+                ScriptExecutionService.ExecutionResult result = executionService.executeScriptInTerminal(script);
+                
+                Platform.runLater(() -> {
+                    progressBar.setVisible(false);
+                    if (result.isSuccess()) {
+                        statusLabel.setText("Terminal opened for: " + script.getName());
+                        showInfo("Terminal Opened", "A terminal window has opened and is executing: " + script.getName() + 
+                                (requiresSudo ? " (with sudo privileges)" : "") +
+                                "\n\nThe terminal will remain open so you can see the script output and interact with it.");
+                    } else {
+                        statusLabel.setText("Failed to open terminal for: " + script.getName());
+                        showError("Terminal Error", "Failed to open terminal for " + script.getName() + ":\n" + result.getError());
+                    }
+                });
+                
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    progressBar.setVisible(false);
+                    statusLabel.setText("Error opening terminal: " + e.getMessage());
+                    showError("Terminal Error", e.getMessage());
+                });
+            }
         }).start();
     }
     
@@ -708,75 +790,185 @@ public class MainController {
     }
     
     private void executeGroupInGUI(ScriptGroup group) {
-        statusLabel.setText("Executing group: " + group.getName());
-        progressBar.setVisible(true);
-        progressBar.setProgress(0);
-        
-        executionService.executeGroupSequentially(group, 
-            event -> {
-                Platform.runLater(() -> {
-                    statusLabel.setText("Group execution in progress...");
-                });
-            },
-            event -> {
-                Platform.runLater(() -> {
-                    progressBar.setVisible(false);
-                    statusLabel.setText("Group execution completed: " + group.getName());
-                });
-            }
-        );
-    }
-    
-    private void executeGroupInTerminals(ScriptGroup group) {
-        statusLabel.setText("Opening terminals for group: " + group.getName());
+        statusLabel.setText("Analyzing group: " + group.getName());
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
         
         // Execute in a separate thread to avoid blocking UI
         new Thread(() -> {
-            final List<Script> scripts = group.getScripts();
-            final int[] successCount = {0};
-            final int[] failCount = {0};
-            
-            for (int i = 0; i < scripts.size(); i++) {
-                final Script script = scripts.get(i);
-                final int currentIndex = i;
+            try {
+                // Get scripts for this group from database
+                List<Script> scripts = dbManager.getScriptsByGroup(group.getId());
+                
+                // Analyze scripts for sudo requirements
+                ScriptAnalysisService analysisService = new ScriptAnalysisService();
+                ScriptAnalysisService.AnalysisResult analysis = analysisService.analyzeScripts(scripts);
+                
+                // Request sudo password if needed
+                if (analysis.hasSudoScripts()) {
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Requesting sudo password for " + analysis.getSudoRequired() + " scripts...");
+                    });
+                    
+                    SudoPasswordManager sudoManager = SudoPasswordManager.getInstance();
+                    boolean passwordObtained = sudoManager.requestSudoPassword(
+                        "Group '" + group.getName() + "' contains " + analysis.getSudoRequired() + 
+                        " scripts that require sudo privileges");
+                    
+                    if (!passwordObtained) {
+                        Platform.runLater(() -> {
+                            progressBar.setVisible(false);
+                            statusLabel.setText("Group execution cancelled - sudo password required");
+                            showInfo("Execution Cancelled", "Sudo password is required for some scripts in this group.");
+                        });
+                        return;
+                    }
+                }
                 
                 Platform.runLater(() -> {
-                    statusLabel.setText("Opening terminal " + (currentIndex + 1) + " of " + scripts.size() + ": " + script.getName());
+                    statusLabel.setText("Executing group: " + group.getName() + 
+                        " (" + analysis.getSudoRequired() + " with sudo, " + analysis.getNonSudo() + " without)");
                 });
                 
-                ScriptExecutionService.ExecutionResult result = executionService.executeScriptInTerminal(script);
+                int successCount = 0;
+                int failCount = 0;
                 
-                if (result.isSuccess()) {
-                    successCount[0]++;
-                } else {
-                    failCount[0]++;
-                }
-                
-                // Small delay between opening terminals
-                try {
+                for (int i = 0; i < scripts.size(); i++) {
+                    final Script script = scripts.get(i);
+                    final int currentIndex = i;
+                    
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Executing script " + (currentIndex + 1) + " of " + scripts.size() + ": " + script.getName());
+                    });
+                    
+                    ScriptExecutionService.ExecutionResult result = executionService.executeScriptWithSudo(script);
+                    
+                    if (result.isSuccess()) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                    
+                    // Small delay between executions
                     Thread.sleep(500);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
                 }
-            }
-            
-            final int finalSuccessCount = successCount[0];
-            final int finalFailCount = failCount[0];
-            
-            Platform.runLater(() -> {
-                progressBar.setVisible(false);
-                statusLabel.setText("Group execution completed: " + group.getName() + 
-                    " (" + finalSuccessCount + " terminals opened, " + finalFailCount + " failed)");
                 
-                if (finalFailCount > 0) {
-                    showInfo("Group Execution Summary", 
-                        "Group execution completed with " + finalSuccessCount + " terminals opened successfully and " + 
-                        finalFailCount + " failures.\n\nCheck the status messages for details about any failures.");
+                final int finalSuccessCount = successCount;
+                final int finalFailCount = failCount;
+                
+                Platform.runLater(() -> {
+                    progressBar.setVisible(false);
+                    statusLabel.setText("Group execution completed: " + group.getName() + 
+                        " (" + finalSuccessCount + " successful, " + finalFailCount + " failed)");
+                    
+                    if (finalFailCount > 0) {
+                        showInfo("Group Execution Summary", 
+                            "Group execution completed with " + finalSuccessCount + " successful executions and " + 
+                            finalFailCount + " failures.\n\nCheck the status messages for details about any failures.");
+                    }
+                });
+                
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    progressBar.setVisible(false);
+                    statusLabel.setText("Error executing group: " + e.getMessage());
+                    showError("Group Execution Error", e.getMessage());
+                });
+            }
+        }).start();
+    }
+    
+    private void executeGroupInTerminals(ScriptGroup group) {
+        statusLabel.setText("Analyzing group: " + group.getName());
+        progressBar.setVisible(true);
+        progressBar.setProgress(-1);
+        
+        // Execute in a separate thread to avoid blocking UI
+        new Thread(() -> {
+            try {
+                // Get scripts for this group from database
+                List<Script> scripts = dbManager.getScriptsByGroup(group.getId());
+                
+                // Analyze scripts for sudo requirements
+                ScriptAnalysisService analysisService = new ScriptAnalysisService();
+                ScriptAnalysisService.AnalysisResult analysis = analysisService.analyzeScripts(scripts);
+                
+                // Request sudo password if needed
+                if (analysis.hasSudoScripts()) {
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Requesting sudo password for " + analysis.getSudoRequired() + " scripts...");
+                    });
+                    
+                    SudoPasswordManager sudoManager = SudoPasswordManager.getInstance();
+                    boolean passwordObtained = sudoManager.requestSudoPassword(
+                        "Group '" + group.getName() + "' contains " + analysis.getSudoRequired() + 
+                        " scripts that require sudo privileges");
+                    
+                    if (!passwordObtained) {
+                        Platform.runLater(() -> {
+                            progressBar.setVisible(false);
+                            statusLabel.setText("Group execution cancelled - sudo password required");
+                            showInfo("Execution Cancelled", "Sudo password is required for some scripts in this group.");
+                        });
+                        return;
+                    }
                 }
-            });
+                
+                Platform.runLater(() -> {
+                    statusLabel.setText("Opening terminals for group: " + group.getName() + 
+                        " (" + analysis.getSudoRequired() + " with sudo, " + analysis.getNonSudo() + " without)");
+                });
+                
+                final int[] successCount = {0};
+                final int[] failCount = {0};
+                
+                for (int i = 0; i < scripts.size(); i++) {
+                    final Script script = scripts.get(i);
+                    final int currentIndex = i;
+                    
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Opening terminal " + (currentIndex + 1) + " of " + scripts.size() + ": " + script.getName());
+                    });
+                    
+                    ScriptExecutionService.ExecutionResult result = executionService.executeScriptInTerminal(script);
+                    
+                    if (result.isSuccess()) {
+                        successCount[0]++;
+                    } else {
+                        failCount[0]++;
+                    }
+                    
+                    // Small delay between opening terminals
+                    try {
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+                
+                final int finalSuccessCount = successCount[0];
+                final int finalFailCount = failCount[0];
+                
+                Platform.runLater(() -> {
+                    progressBar.setVisible(false);
+                    statusLabel.setText("Group execution completed: " + group.getName() + 
+                        " (" + finalSuccessCount + " terminals opened, " + finalFailCount + " failed)");
+                    
+                    if (finalFailCount > 0) {
+                        showInfo("Group Execution Summary", 
+                            "Group execution completed with " + finalSuccessCount + " terminals opened successfully and " + 
+                            finalFailCount + " failures.\n\nCheck the status messages for details about any failures.");
+                    }
+                });
+                
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    progressBar.setVisible(false);
+                    statusLabel.setText("Error executing group: " + e.getMessage());
+                    showError("Group Execution Error", e.getMessage());
+                });
+            }
         }).start();
     }
     
