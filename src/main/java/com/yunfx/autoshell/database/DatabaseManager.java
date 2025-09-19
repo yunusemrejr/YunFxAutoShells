@@ -83,21 +83,34 @@ public class DatabaseManager {
 
     // Script Group Operations
     public void saveGroup(ScriptGroup group) throws SQLException {
-        String sql = "INSERT OR REPLACE INTO script_groups (id, name, description, created_at) VALUES (?, ?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            stmt.setObject(1, group.getId());
-            stmt.setString(2, group.getName());
-            stmt.setString(3, group.getDescription());
-            stmt.setString(4, group.getCreatedAt().toString());
-            
-            stmt.executeUpdate();
-            
-            if (group.getId() == null) {
-                try (ResultSet rs = stmt.getGeneratedKeys()) {
+        if (group.getId() == null) {
+            // Insert new group
+            String sql = "INSERT INTO script_groups (name, description, created_at) VALUES (?, ?, ?)";
+            try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+                stmt.setString(1, group.getName());
+                stmt.setString(2, group.getDescription());
+                stmt.setString(3, group.getCreatedAt().toString());
+                
+                stmt.executeUpdate();
+                
+                // Get the generated ID using last_insert_rowid()
+                try (Statement idStmt = connection.createStatement();
+                     ResultSet rs = idStmt.executeQuery("SELECT last_insert_rowid()")) {
                     if (rs.next()) {
                         group.setId(rs.getLong(1));
                     }
                 }
+            }
+        } else {
+            // Update existing group
+            String sql = "UPDATE script_groups SET name = ?, description = ?, created_at = ? WHERE id = ?";
+            try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+                stmt.setString(1, group.getName());
+                stmt.setString(2, group.getDescription());
+                stmt.setString(3, group.getCreatedAt().toString());
+                stmt.setLong(4, group.getId());
+                
+                stmt.executeUpdate();
             }
         }
     }
@@ -134,22 +147,43 @@ public class DatabaseManager {
 
     // Script Operations
     public void saveScript(Script script) throws SQLException {
-        String sql = "INSERT OR REPLACE INTO scripts (id, name, description, file_path, last_modified, executable, content) VALUES (?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            stmt.setObject(1, null); // Let auto-increment handle ID
-            stmt.setString(2, script.getName());
-            stmt.setString(3, script.getDescription());
-            stmt.setString(4, script.getFilePath().toString());
-            stmt.setString(5, script.getLastModified() != null ? script.getLastModified().toString() : null);
-            stmt.setBoolean(6, script.isExecutable());
-            stmt.setString(7, script.getContent());
-            
-            stmt.executeUpdate();
-            
-            try (ResultSet rs = stmt.getGeneratedKeys()) {
+        // Check if script already exists
+        String checkSql = "SELECT id FROM scripts WHERE file_path = ?";
+        Long existingId = null;
+        try (PreparedStatement checkStmt = connection.prepareStatement(checkSql)) {
+            checkStmt.setString(1, script.getFilePath().toString());
+            try (ResultSet rs = checkStmt.executeQuery()) {
                 if (rs.next()) {
-                    // Update script with generated ID if needed
+                    existingId = rs.getLong("id");
                 }
+            }
+        }
+        
+        if (existingId != null) {
+            // Update existing script
+            String sql = "UPDATE scripts SET name = ?, description = ?, last_modified = ?, executable = ?, content = ? WHERE id = ?";
+            try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+                stmt.setString(1, script.getName());
+                stmt.setString(2, script.getDescription());
+                stmt.setString(3, script.getLastModified() != null ? script.getLastModified().toString() : null);
+                stmt.setBoolean(4, script.isExecutable());
+                stmt.setString(5, script.getContent());
+                stmt.setLong(6, existingId);
+                
+                stmt.executeUpdate();
+            }
+        } else {
+            // Insert new script
+            String sql = "INSERT INTO scripts (name, description, file_path, last_modified, executable, content) VALUES (?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+                stmt.setString(1, script.getName());
+                stmt.setString(2, script.getDescription());
+                stmt.setString(3, script.getFilePath().toString());
+                stmt.setString(4, script.getLastModified() != null ? script.getLastModified().toString() : null);
+                stmt.setBoolean(5, script.isExecutable());
+                stmt.setString(6, script.getContent());
+                
+                stmt.executeUpdate();
             }
         }
     }
@@ -185,7 +219,20 @@ public class DatabaseManager {
         // First ensure script exists in database
         Long scriptId = getScriptIdByPath(scriptPath);
         if (scriptId == null) {
-            throw new SQLException("Script not found: " + scriptPath);
+            // Try to find script by path in the scripts table
+            String findSql = "SELECT id FROM scripts WHERE file_path = ?";
+            try (PreparedStatement findStmt = connection.prepareStatement(findSql)) {
+                findStmt.setString(1, scriptPath);
+                try (ResultSet rs = findStmt.executeQuery()) {
+                    if (rs.next()) {
+                        scriptId = rs.getLong("id");
+                    }
+                }
+            }
+            
+            if (scriptId == null) {
+                throw new SQLException("Script not found in database: " + scriptPath);
+            }
         }
 
         String sql = "INSERT OR IGNORE INTO group_scripts (group_id, script_id) VALUES (?, ?)";
