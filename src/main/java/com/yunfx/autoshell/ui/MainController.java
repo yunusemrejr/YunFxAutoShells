@@ -6,6 +6,7 @@ import com.yunfx.autoshell.model.Script;
 import com.yunfx.autoshell.model.ScriptGroup;
 import com.yunfx.autoshell.service.ScriptDiscoveryService;
 import com.yunfx.autoshell.service.ScriptExecutionService;
+import com.yunfx.autoshell.service.SudoService;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -31,6 +32,7 @@ public class MainController {
     private DatabaseManager dbManager;
     private ScriptDiscoveryService discoveryService;
     private ScriptExecutionService executionService;
+    private SudoService sudoService;
     
     // UI Components
     private JFXTextField searchField;
@@ -54,6 +56,7 @@ public class MainController {
         this.dbManager = DatabaseManager.getInstance();
         this.discoveryService = new ScriptDiscoveryService();
         this.executionService = new ScriptExecutionService();
+        this.sudoService = new SudoService();
         
         initializeData();
         createUI();
@@ -263,6 +266,9 @@ public class MainController {
     
     private void loadData() {
         try {
+            // Check and install dependencies first
+            checkAndInstallDependencies();
+            
             // Load groups from database
             groups.clear();
             groups.addAll(dbManager.getAllGroups());
@@ -278,6 +284,72 @@ public class MainController {
         } catch (Exception e) {
             showError("Error loading data", e.getMessage());
         }
+    }
+    
+    private void checkAndInstallDependencies() {
+        statusLabel.setText("Checking dependencies...");
+        progressBar.setVisible(true);
+        progressBar.setProgress(-1);
+        
+        // Check Java
+        sudoService.checkDependencyAsync("java").thenAccept(result -> {
+            if (!result.isSuccess()) {
+                Platform.runLater(() -> {
+                    showDependencyInstallDialog("Java", "openjdk-17-jdk");
+                });
+            }
+        });
+        
+        // Check Maven
+        sudoService.checkDependencyAsync("mvn").thenAccept(result -> {
+            if (!result.isSuccess()) {
+                Platform.runLater(() -> {
+                    showDependencyInstallDialog("Maven", "maven");
+                });
+            }
+        });
+        
+        // Check JavaFX
+        sudoService.executeCommandAsync("ls /usr/share/openjfx/lib/").thenAccept(result -> {
+            if (!result.isSuccess()) {
+                Platform.runLater(() -> {
+                    showDependencyInstallDialog("JavaFX", "openjfx");
+                });
+            }
+        });
+    }
+    
+    private void showDependencyInstallDialog(String dependencyName, String packageName) {
+        Alert installDialog = new Alert(Alert.AlertType.CONFIRMATION);
+        installDialog.setTitle("Install " + dependencyName);
+        installDialog.setHeaderText(dependencyName + " is required but not installed");
+        installDialog.setContentText("Would you like to install " + dependencyName + " now? This will require administrator privileges.");
+        
+        Optional<ButtonType> result = installDialog.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            installDependency(packageName);
+        } else {
+            showError("Missing Dependency", dependencyName + " is required to run this application. Please install it manually or restart the application to install it automatically.");
+        }
+    }
+    
+    private void installDependency(String packageName) {
+        statusLabel.setText("Installing " + packageName + "...");
+        progressBar.setVisible(true);
+        progressBar.setProgress(-1);
+        
+        sudoService.installDependencyAsync(packageName).thenAccept(result -> {
+            Platform.runLater(() -> {
+                progressBar.setVisible(false);
+                if (result.isSuccess()) {
+                    statusLabel.setText(packageName + " installed successfully");
+                    showInfo("Installation Complete", packageName + " has been installed successfully.");
+                } else {
+                    statusLabel.setText("Failed to install " + packageName);
+                    showError("Installation Failed", "Failed to install " + packageName + ":\n" + result.getError());
+                }
+            });
+        });
     }
     
     private void selectDirectory(ActionEvent event) {
