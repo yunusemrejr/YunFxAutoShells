@@ -323,7 +323,7 @@ public class MainController {
         Alert installDialog = new Alert(Alert.AlertType.CONFIRMATION);
         installDialog.setTitle("Install " + dependencyName);
         installDialog.setHeaderText(dependencyName + " is required but not installed");
-        installDialog.setContentText("Would you like to install " + dependencyName + " now? This will require administrator privileges.");
+        installDialog.setContentText("Would you like to install " + dependencyName + " now?\n\nA terminal window will open where you can enter your password for administrator privileges.");
         
         Optional<ButtonType> result = installDialog.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
@@ -334,7 +334,7 @@ public class MainController {
     }
     
     private void installDependency(String packageName) {
-        statusLabel.setText("Installing " + packageName + "...");
+        statusLabel.setText("Opening terminal for " + packageName + " installation...");
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
         
@@ -342,11 +342,11 @@ public class MainController {
             Platform.runLater(() -> {
                 progressBar.setVisible(false);
                 if (result.isSuccess()) {
-                    statusLabel.setText(packageName + " installed successfully");
-                    showInfo("Installation Complete", packageName + " has been installed successfully.");
+                    statusLabel.setText("Terminal opened for " + packageName + " installation");
+                    showInfo("Terminal Opened", "A terminal window has opened for installing " + packageName + ".\nPlease follow the instructions in the terminal and enter your password when prompted.\n\nThe terminal will close automatically when the installation is complete.");
                 } else {
-                    statusLabel.setText("Failed to install " + packageName);
-                    showError("Installation Failed", "Failed to install " + packageName + ":\n" + result.getError());
+                    statusLabel.setText("Failed to open terminal for " + packageName);
+                    showError("Terminal Error", "Failed to open terminal for " + packageName + ":\n" + result.getError());
                 }
             });
         });

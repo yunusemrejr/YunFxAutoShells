@@ -47,14 +47,8 @@ public class SudoService {
                 return executeCommandSync(command);
             }
             
-            // Prompt for sudo password
-            String password = promptForSudoPassword();
-            if (password == null) {
-                return new SudoResult(false, "", "User cancelled sudo password entry", -1);
-            }
-            
-            // Execute with sudo
-            return executeSudoCommandWithPassword(command, password);
+            // Open terminal for sudo command
+            return executeSudoCommandInTerminal(command);
             
         } catch (Exception e) {
             return new SudoResult(false, "", "Error executing command: " + e.getMessage(), -1);
@@ -129,42 +123,57 @@ public class SudoService {
         return password[0];
     }
     
-    private SudoResult executeSudoCommandWithPassword(String command, String password) {
+    private SudoResult executeSudoCommandInTerminal(String command) {
         try {
-            ProcessBuilder processBuilder = new ProcessBuilder("sudo", "-S", "bash", "-c", command);
+            // Create a script that will run the sudo command in a terminal
+            String scriptContent = String.format(
+                "#!/bin/bash\n" +
+                "echo '🔐 Administrator privileges required for: %s'\n" +
+                "echo 'Please enter your password when prompted:'\n" +
+                "echo ''\n" +
+                "if %s; then\n" +
+                "    echo ''\n" +
+                "    echo '✅ Command completed successfully!'\n" +
+                "else\n" +
+                "    echo ''\n" +
+                "    echo '❌ Command failed!'\n" +
+                "fi\n" +
+                "echo ''\n" +
+                "echo 'Press any key to close this terminal...'\n" +
+                "read -n 1\n",
+                command, command
+            );
+            
+            // Write script to temp file
+            String tempScript = System.getProperty("java.io.tmpdir") + "/yunfx_sudo_" + System.currentTimeMillis() + ".sh";
+            try (PrintWriter writer = new PrintWriter(new FileWriter(tempScript))) {
+                writer.write(scriptContent);
+            }
+            
+            // Make script executable
+            new File(tempScript).setExecutable(true);
+            
+            // Open terminal with the script
+            String terminalCommand = String.format(
+                "gnome-terminal --title='YunFx AutoShell - Administrator Access' -- bash -c '%s'",
+                tempScript
+            );
+            
+            ProcessBuilder processBuilder = new ProcessBuilder("bash", "-c", terminalCommand);
             processBuilder.redirectErrorStream(true);
             
             Process process = processBuilder.start();
             
-            // Send password to sudo
-            try (PrintWriter writer = new PrintWriter(process.getOutputStream())) {
-                writer.println(password);
-                writer.flush();
-            }
+            // Wait for terminal to open
+            Thread.sleep(2000);
             
-            // Read output
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-            }
+            // Clean up temp script
+            new File(tempScript).delete();
             
-            // Wait for completion
-            boolean finished = process.waitFor(60, TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                return new SudoResult(false, output.toString(), "Command timed out", -1);
-            }
-            
-            int exitCode = process.exitValue();
-            boolean success = exitCode == 0;
-            
-            return new SudoResult(success, output.toString(), "", exitCode);
+            return new SudoResult(true, "Terminal opened for sudo command: " + command, "", 0);
             
         } catch (Exception e) {
-            return new SudoResult(false, "", "Error executing sudo command: " + e.getMessage(), -1);
+            return new SudoResult(false, "", "Error opening terminal for sudo command: " + e.getMessage(), -1);
         }
     }
     

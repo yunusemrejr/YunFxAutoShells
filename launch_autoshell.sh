@@ -18,12 +18,14 @@ fi
 
 # Check Maven
 if ! command -v mvn &> /dev/null; then
-    echo "⚠️  Maven not found. The application will prompt you to install it."
+    echo "❌ Maven not found. Installing Maven..."
+    sudo apt update && sudo apt install -y maven
 fi
 
 # Check JavaFX
 if [ ! -d "/usr/share/openjfx/lib" ]; then
-    echo "⚠️  JavaFX not found. The application will prompt you to install it."
+    echo "❌ JavaFX not found. Installing JavaFX..."
+    sudo apt install -y openjfx
 fi
 
 # Ensure dependencies are available
