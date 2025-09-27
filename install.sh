@@ -574,9 +574,16 @@ refresh_desktop() {
     if command -v gtk-update-icon-cache &> /dev/null; then
         print_status "Updating icon cache..."
         gtk-update-icon-cache -f -t "$HOME/.local/share/icons" 2>/dev/null || true
+        gtk-update-icon-cache -f -t "/usr/share/icons" 2>/dev/null || true
         if [ "$SYSTEM_INSTALL" = true ]; then
             gtk-update-icon-cache -f -t "/usr/share/pixmaps" 2>/dev/null || true
         fi
+    fi
+    
+    # Additional icon cache refresh for different desktop environments
+    if command -v xdg-desktop-menu &> /dev/null; then
+        print_status "Refreshing XDG desktop menu..."
+        xdg-desktop-menu forceupdate 2>/dev/null || true
     fi
     
     # Update MIME database
@@ -590,16 +597,34 @@ refresh_desktop() {
         *GNOME*|*gnome*)
             print_status "Refreshing GNOME desktop..."
             gsettings set org.gnome.desktop.background show-desktop-icons true 2>/dev/null || true
+            # Force GNOME shell to reload
+            killall -HUP gnome-shell 2>/dev/null || true
             ;;
         *KDE*|*kde*)
             print_status "Refreshing KDE desktop..."
             kbuildsycoca5 2>/dev/null || true
+            # Force Plasma to reload
+            killall -HUP plasmashell 2>/dev/null || true
             ;;
         *XFCE*|*xfce*)
             print_status "Refreshing XFCE desktop..."
             xfce4-panel -r 2>/dev/null || true
             ;;
+        *CINNAMON*|*cinnamon*)
+            print_status "Refreshing Cinnamon desktop..."
+            killall -HUP cinnamon 2>/dev/null || true
+            ;;
+        *MATE*|*mate*)
+            print_status "Refreshing MATE desktop..."
+            killall -HUP mate-panel 2>/dev/null || true
+            ;;
     esac
+    
+    # Generic desktop environment refresh
+    print_status "Performing generic desktop refresh..."
+    # Restart desktop environment components
+    killall -HUP gtk-launch 2>/dev/null || true
+    killall -HUP gtk-application 2>/dev/null || true
     
     print_success "Desktop environment refreshed"
 }
