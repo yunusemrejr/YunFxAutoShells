@@ -272,32 +272,26 @@ public class ScriptExecutionService {
                 return new ExecutionResult(false, "", "Script file not found: " + scriptPath, -1, 0);
             }
             
-            if (!scriptPath.toFile().canExecute()) {
-                return new ExecutionResult(false, "", "Script is not executable: " + scriptPath, -1, 0);
-            }
+            // Open terminal in script directory with script name ready to execute
+            // User will manually press enter and enter sudo password if needed
+            String scriptDirectory = scriptPath.getParent().toString();
+            String scriptName = scriptPath.getFileName().toString();
             
-            // Check if script requires sudo
-            boolean requiresSudo = analysisService.requiresSudo(script);
-            String sudoPrefix = sudoManager.getSudoPrefix(requiresSudo);
-            
-            // Build command with sudo if needed
-            String scriptCommand;
-            if (requiresSudo && !sudoPrefix.isEmpty()) {
-                scriptCommand = "cd \"" + scriptPath.getParent() + "\" && echo '" + 
-                    sudoManager.getPasswordInput(requiresSudo).trim() + "' | " + 
-                    sudoPrefix + " \"" + scriptPath + "\"";
-            } else {
-                scriptCommand = "cd \"" + scriptPath.getParent() + "\" && \"" + scriptPath + "\"";
-            }
+            // Create command that opens terminal and navigates to script directory
+            // Then displays the script name for user to manually execute
+            String terminalCommand = String.format(
+                "cd \"%s\" && echo \"Script: %s\" && echo \"Directory: %s\" && echo \"Ready to execute. Press Enter to run: %s\" && echo \"%s\" && exec bash",
+                scriptDirectory, scriptName, scriptDirectory, scriptName, scriptName
+            );
             
             // Try different terminal emulators
             String[] terminalCommands = {
-                "gnome-terminal -- bash -c '" + scriptCommand + "; exec bash'",
-                "xterm -e 'bash -c \"" + scriptCommand + "; exec bash\"'",
-                "konsole -e 'bash -c \"" + scriptCommand + "; exec bash\"'",
-                "xfce4-terminal -e 'bash -c \"" + scriptCommand + "; exec bash\"'",
-                "mate-terminal -e 'bash -c \"" + scriptCommand + "; exec bash\"'",
-                "lxterminal -e 'bash -c \"" + scriptCommand + "; exec bash\"'"
+                "gnome-terminal -- bash -c '" + terminalCommand + "'",
+                "xterm -e 'bash -c \"" + terminalCommand + "\"'",
+                "konsole -e 'bash -c \"" + terminalCommand + "\"'",
+                "xfce4-terminal -e 'bash -c \"" + terminalCommand + "\"'",
+                "mate-terminal -e 'bash -c \"" + terminalCommand + "\"'",
+                "lxterminal -e 'bash -c \"" + terminalCommand + "\"'"
             };
             
             ProcessBuilder processBuilder = null;
@@ -324,12 +318,83 @@ public class ScriptExecutionService {
             Thread.sleep(1000);
             
             long executionTime = System.currentTimeMillis() - startTime;
-            return new ExecutionResult(true, "Terminal opened successfully" + 
-                (requiresSudo ? " (with sudo)" : ""), "", 0, executionTime);
+            return new ExecutionResult(true, "Terminal opened with script ready for execution: " + scriptName, "", 0, executionTime);
             
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;
             return new ExecutionResult(false, "", "Failed to open terminal: " + e.getMessage(), -1, executionTime);
+        }
+    }
+    
+    public ExecutionResult executeMultipleScriptsInTerminal(List<Script> scripts) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            if (scripts == null || scripts.isEmpty()) {
+                return new ExecutionResult(false, "", "No scripts provided", -1, 0);
+            }
+            
+            // Create a temporary script that will open terminals for each script
+            StringBuilder scriptBuilder = new StringBuilder();
+            scriptBuilder.append("#!/bin/bash\n");
+            scriptBuilder.append("echo \"Opening terminals for ").append(scripts.size()).append(" scripts...\"\n");
+            
+            for (int i = 0; i < scripts.size(); i++) {
+                Script script = scripts.get(i);
+                Path scriptPath = script.getFilePath();
+                
+                if (!scriptPath.toFile().exists()) {
+                    continue; // Skip non-existent scripts
+                }
+                
+                String scriptDirectory = scriptPath.getParent().toString();
+                String scriptName = scriptPath.getFileName().toString();
+                
+                scriptBuilder.append("echo \"Opening terminal ").append(i + 1).append(" for: ").append(scriptName).append("\"\n");
+                
+                // Create command for each script
+                String terminalCommand = String.format(
+                    "cd \"%s\" && echo \"Script: %s\" && echo \"Directory: %s\" && echo \"Ready to execute. Press Enter to run: %s\" && echo \"%s\" && exec bash",
+                    scriptDirectory, scriptName, scriptDirectory, scriptName, scriptName
+                );
+                
+                // Try different terminal emulators for each script
+                String[] terminalCommands = {
+                    "gnome-terminal -- bash -c '" + terminalCommand + "'",
+                    "xterm -e 'bash -c \"" + terminalCommand + "\"'",
+                    "konsole -e 'bash -c \"" + terminalCommand + "\"'",
+                    "xfce4-terminal -e 'bash -c \"" + terminalCommand + "\"'",
+                    "mate-terminal -e 'bash -c \"" + terminalCommand + "\"'",
+                    "lxterminal -e 'bash -c \"" + terminalCommand + "\"'"
+                };
+                
+                scriptBuilder.append("(");
+                for (int j = 0; j < terminalCommands.length; j++) {
+                    if (j > 0) scriptBuilder.append(" || ");
+                    scriptBuilder.append("bash -c \"").append(terminalCommands[j].replace("\"", "\\\"")).append("\"");
+                }
+                scriptBuilder.append(") &\n");
+                
+                // Small delay between opening terminals
+                scriptBuilder.append("sleep 0.5\n");
+            }
+            
+            scriptBuilder.append("echo \"All terminals opened. Check your desktop for terminal windows.\"\n");
+            scriptBuilder.append("sleep 2\n");
+            
+            // Create and execute the temporary script
+            ProcessBuilder processBuilder = new ProcessBuilder("bash", "-c", scriptBuilder.toString());
+            Process process = processBuilder.start();
+            
+            // Wait a bit to see if the terminals open successfully
+            Thread.sleep(2000);
+            
+            long executionTime = System.currentTimeMillis() - startTime;
+            return new ExecutionResult(true, "Terminals opened for " + scripts.size() + " scripts", "", 0, executionTime);
+            
+        } catch (Exception e) {
+            long executionTime = System.currentTimeMillis() - startTime;
+            return new ExecutionResult(false, "", "Failed to open terminals: " + e.getMessage(), -1, executionTime);
         }
     }
 }

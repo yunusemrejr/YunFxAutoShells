@@ -22,6 +22,8 @@ import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.layout.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 
@@ -232,15 +234,14 @@ public class MainController {
         scriptTable.setPrefHeight(400);
         scriptTable.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131;");
         
+        // Enable multi-selection with Shift key
+        scriptTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        
         TableColumn<Script, String> nameCol = new TableColumn<>("Name");
         nameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
         nameCol.setPrefWidth(200);
         nameCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         
-        TableColumn<Script, String> descriptionCol = new TableColumn<>("Description");
-        descriptionCol.setCellValueFactory(new PropertyValueFactory<>("description"));
-        descriptionCol.setPrefWidth(250);
-        descriptionCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         
         TableColumn<Script, String> pathCol = new TableColumn<>("Path");
         pathCol.setCellValueFactory(cellData -> 
@@ -254,7 +255,7 @@ public class MainController {
         executableCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         
         TableColumn<Script, Void> actionsCol = new TableColumn<>("Actions");
-        actionsCol.setPrefWidth(150);
+        actionsCol.setPrefWidth(220);
         actionsCol.setStyle("-fx-background-color: #666666; -fx-text-fill: #ffffff; -fx-font-weight: bold;");
         actionsCol.setCellFactory(param -> new TableCell<Script, Void>() {
             private final JFXButton executeBtn = new JFXButton("Execute");
@@ -262,9 +263,9 @@ public class MainController {
             private final JFXButton addToGroupBtn = new JFXButton("Add to Group");
             
             {
-                executeBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 4 8;");
-                terminalBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 4 8;");
-                addToGroupBtn.setStyle("-fx-background-color: #ec503b; -fx-text-fill: #ffffff; -fx-font-size: 10px; -fx-font-weight: bold; -fx-padding: 4 8;");
+                executeBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 6 10;");
+                terminalBtn.setStyle("-fx-background-color: #ffffff; -fx-text-fill: #313131; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 6 10;");
+                addToGroupBtn.setStyle("-fx-background-color: #ec503b; -fx-text-fill: #ffffff; -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 6 10;");
                 
                 executeBtn.setOnAction(e -> executeScript(getTableView().getItems().get(getIndex())));
                 terminalBtn.setOnAction(e -> executeScriptInTerminal(getTableView().getItems().get(getIndex())));
@@ -277,35 +278,88 @@ public class MainController {
                 if (empty) {
                     setGraphic(null);
                 } else {
-                    HBox buttons = new HBox(3);
+                    HBox buttons = new HBox(8);
                     buttons.getChildren().addAll(executeBtn, terminalBtn, addToGroupBtn);
                     setGraphic(buttons);
                 }
             }
         });
         
-        scriptTable.getColumns().addAll(nameCol, descriptionCol, pathCol, executableCol, actionsCol);
+        scriptTable.getColumns().addAll(nameCol, pathCol, executableCol, actionsCol);
         scriptTable.setItems(scripts);
+        
+        // Create context menu for multi-selection
+        createScriptContextMenu();
         
         scriptPanel.getChildren().addAll(scriptLabel, scriptTable);
         return scriptPanel;
     }
     
     private HBox createStatusBar() {
-        HBox statusBar = new HBox(10);
+        HBox statusBar = new HBox(15);
         statusBar.setAlignment(Pos.CENTER_LEFT);
-        statusBar.setPadding(new Insets(10));
+        statusBar.setPadding(new Insets(15, 20, 15, 20)); // Increased padding for better spacing
         statusBar.setStyle("-fx-background-color: #313131; -fx-border-color: #666666; -fx-border-width: 1 0 0 0;");
         
+        // Left side - status and progress
+        HBox leftSection = new HBox(15); // Increased spacing
+        leftSection.setAlignment(Pos.CENTER_LEFT);
+        
         statusLabel = new Label("Ready");
-        statusLabel.setStyle("-fx-text-fill: #ffffff; -fx-font-weight: bold;");
+        statusLabel.setStyle("-fx-text-fill: #ffffff; -fx-font-weight: bold; -fx-font-size: 14px;");
         progressBar = new ProgressBar();
         progressBar.setVisible(false);
         progressBar.setPrefWidth(200);
         progressBar.setStyle("-fx-accent: #ec503b;");
         
-        statusBar.getChildren().addAll(statusLabel, progressBar);
+        leftSection.getChildren().addAll(statusLabel, progressBar);
+        
+        // Right side - application icon with enhanced container
+        ImageView appIcon = createAppIcon();
+        
+        // Create an enhanced container for the icon with better styling
+        VBox iconContainer = new VBox();
+        iconContainer.setAlignment(Pos.CENTER_RIGHT);
+        iconContainer.setPadding(new Insets(5)); // Add some padding around the icon
+        iconContainer.getChildren().add(appIcon);
+        
+        statusBar.getChildren().addAll(leftSection, iconContainer);
+        HBox.setHgrow(leftSection, Priority.ALWAYS);
+        HBox.setHgrow(iconContainer, Priority.NEVER);
+        
         return statusBar;
+    }
+    
+    private ImageView createAppIcon() {
+        try {
+            // Load the icon image
+            Image iconImage = new Image(getClass().getResourceAsStream("/media/icon.png"));
+            ImageView iconView = new ImageView(iconImage);
+            
+            // Set larger, more prominent size (72x72 for better visibility)
+            iconView.setFitWidth(72);
+            iconView.setFitHeight(72);
+            iconView.setPreserveRatio(true);
+            iconView.setSmooth(true);
+            
+            // Apply CSS class for styling
+            iconView.getStyleClass().add("app-icon");
+            
+            return iconView;
+        } catch (Exception e) {
+            // If icon loading fails, return a placeholder
+            ImageView placeholder = new ImageView();
+            placeholder.setFitWidth(72);
+            placeholder.setFitHeight(72);
+            placeholder.setStyle(
+                "-fx-background-color: #666666;" +
+                "-fx-background-radius: 12px;" +
+                "-fx-border-color: #999999;" +
+                "-fx-border-width: 2px;" +
+                "-fx-border-radius: 12px;"
+            );
+            return placeholder;
+        }
     }
     
     private void loadData() {
@@ -707,9 +761,9 @@ public class MainController {
                     progressBar.setVisible(false);
                     if (result.isSuccess()) {
                         statusLabel.setText("Terminal opened for: " + script.getName());
-                        showInfo("Terminal Opened", "A terminal window has opened and is executing: " + script.getName() + 
-                                (requiresSudo ? " (with sudo privileges)" : "") +
-                                "\n\nThe terminal will remain open so you can see the script output and interact with it.");
+                        showInfo("Terminal Opened", "A terminal window has opened for: " + script.getName() + 
+                                "\n\nThe terminal is ready for you to manually execute the script by pressing Enter.\n" +
+                                "You can enter sudo password if needed in the terminal.");
                     } else {
                         statusLabel.setText("Failed to open terminal for: " + script.getName());
                         showError("Terminal Error", "Failed to open terminal for " + script.getName() + ":\n" + result.getError());
@@ -986,5 +1040,133 @@ public class MainController {
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+    
+    private void createScriptContextMenu() {
+        ContextMenu contextMenu = new ContextMenu();
+        
+        MenuItem runSelectedInTerminal = new MenuItem("Run Selected in Terminal");
+        runSelectedInTerminal.setOnAction(e -> runSelectedScriptsInTerminal());
+        
+        MenuItem addSelectedToGroup = new MenuItem("Add Selected to Group");
+        addSelectedToGroup.setOnAction(e -> addSelectedScriptsToGroup());
+        
+        contextMenu.getItems().addAll(runSelectedInTerminal, addSelectedToGroup);
+        
+        // Set context menu on the table
+        scriptTable.setContextMenu(contextMenu);
+        
+        // Show context menu only when right-clicking on selected items
+        scriptTable.setOnContextMenuRequested(event -> {
+            ObservableList<Script> selectedScripts = scriptTable.getSelectionModel().getSelectedItems();
+            if (selectedScripts.isEmpty()) {
+                event.consume(); // Don't show context menu if no items are selected
+                return;
+            }
+            
+            // Update menu item text based on selection count
+            if (selectedScripts.size() == 1) {
+                runSelectedInTerminal.setText("Run Selected in Terminal");
+                addSelectedToGroup.setText("Add Selected to Group");
+            } else {
+                runSelectedInTerminal.setText("Run " + selectedScripts.size() + " Selected in Terminal");
+                addSelectedToGroup.setText("Add " + selectedScripts.size() + " Selected to Group");
+            }
+        });
+    }
+    
+    private void runSelectedScriptsInTerminal() {
+        ObservableList<Script> selectedScripts = scriptTable.getSelectionModel().getSelectedItems();
+        if (selectedScripts.isEmpty()) {
+            showInfo("No Selection", "Please select one or more scripts to run in terminal.");
+            return;
+        }
+        
+        List<Script> scriptsList = new ArrayList<>(selectedScripts);
+        
+        // Confirm execution
+        Alert confirmDialog = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmDialog.setTitle("Run Selected Scripts in Terminal");
+        confirmDialog.setHeaderText("Run " + scriptsList.size() + " selected scripts in terminal");
+        confirmDialog.setContentText("This will open " + scriptsList.size() + " terminal windows, one for each script.\n" +
+            "Each terminal will navigate to the script's directory and display the script name for you to manually execute.\n\n" +
+            "Continue?");
+        
+        Optional<ButtonType> result = confirmDialog.showAndWait();
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            statusLabel.setText("Opening terminals for " + scriptsList.size() + " selected scripts...");
+            progressBar.setVisible(true);
+            progressBar.setProgress(-1);
+            
+            // Execute in a separate thread to avoid blocking UI
+            new Thread(() -> {
+                try {
+                    ScriptExecutionService.ExecutionResult executionResult = executionService.executeMultipleScriptsInTerminal(scriptsList);
+                    
+                    Platform.runLater(() -> {
+                        progressBar.setVisible(false);
+                        if (executionResult.isSuccess()) {
+                            statusLabel.setText("Terminals opened for " + scriptsList.size() + " scripts");
+                            showInfo("Terminals Opened", "Terminal windows have been opened for " + scriptsList.size() + 
+                                " scripts.\n\nEach terminal is ready for you to manually execute the script by pressing Enter.\n" +
+                                "You can enter sudo password if needed in each terminal.");
+                        } else {
+                            statusLabel.setText("Failed to open terminals for selected scripts");
+                            showError("Terminal Error", "Failed to open terminals:\n" + executionResult.getError());
+                        }
+                    });
+                } catch (Exception e) {
+                    Platform.runLater(() -> {
+                        progressBar.setVisible(false);
+                        statusLabel.setText("Error opening terminals: " + e.getMessage());
+                        showError("Terminal Error", e.getMessage());
+                    });
+                }
+            }).start();
+        }
+    }
+    
+    private void addSelectedScriptsToGroup() {
+        ObservableList<Script> selectedScripts = scriptTable.getSelectionModel().getSelectedItems();
+        if (selectedScripts.isEmpty()) {
+            showInfo("No Selection", "Please select one or more scripts to add to a group.");
+            return;
+        }
+        
+        if (groups.isEmpty()) {
+            showInfo("No Groups", "Please create a group first.");
+            return;
+        }
+        
+        ChoiceDialog<ScriptGroup> dialog = new ChoiceDialog<>(groups.get(0), groups);
+        dialog.setTitle("Add Selected Scripts to Group");
+        dialog.setHeaderText("Add " + selectedScripts.size() + " selected scripts to a group");
+        dialog.setContentText("Choose group:");
+        
+        Optional<ScriptGroup> result = dialog.showAndWait();
+        if (result.isPresent()) {
+            try {
+                ScriptGroup group = result.get();
+                List<Script> scriptsList = new ArrayList<>(selectedScripts);
+                
+                for (Script script : scriptsList) {
+                    group.addScript(script);
+                    dbManager.addScriptToGroup(group.getId(), script.getFilePath().toString());
+                }
+                
+                dbManager.saveGroup(group);
+                
+                // Refresh the groups to show updated script count
+                refreshGroups();
+                
+                // Update the group filter to show the updated group
+                groupFilterCombo.setValue(group.getName());
+                filterScripts();
+                
+                statusLabel.setText("Added " + scriptsList.size() + " scripts to group: " + group.getName());
+            } catch (Exception e) {
+                showError("Error adding scripts to group", e.getMessage());
+            }
+        }
     }
 }
